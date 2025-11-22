@@ -119,7 +119,7 @@ export default function App() {
     useEffect(() => {
         let es = null;
         try {
-            es = new EventSource('/api/realtime/stream');
+            es = new EventSource('/sse');
         }
         catch (err) {
             console.warn('SSE not available', err);

@@ -46,7 +46,7 @@ export function OverviewDashboard({ overallAverages, surveyResponses, mockData, 
     useEffect(() => {
         let es = null;
         try {
-            es = new EventSource('/api/realtime/stream');
+            es = new EventSource('/sse');
         }
         catch (err) {
             console.error('EventSource not supported or failed to connect', err);
