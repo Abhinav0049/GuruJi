@@ -73,6 +73,7 @@ app.get('/sse', (req, res) => {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': '*',
   });
 
   res.flushHeaders?.();
