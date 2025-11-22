@@ -138,17 +138,17 @@ export function ModuleSurveyTab({
             </p>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-3">
+          {/* Action Buttons (stack on small screens) */}
+          <div className="flex flex-col sm:flex-row gap-3">
             {status === 'not-started' && (
-              <Button onClick={onStartSurvey} size="lg" className="flex items-center gap-2">
+              <Button onClick={onStartSurvey} size="lg" className="w-full sm:w-auto flex items-center gap-2">
                 <FileText className="h-4 w-4" />
                 Start Survey
               </Button>
             )}
             
             {status === 'in-progress' && (
-              <Button onClick={onResumeSurvey} size="lg" className="flex items-center gap-2">
+              <Button onClick={onResumeSurvey} size="lg" className="w-full sm:w-auto flex items-center gap-2">
                 <Clock className="h-4 w-4" />
                 Resume Survey
               </Button>
@@ -159,7 +159,7 @@ export function ModuleSurveyTab({
               onClick={onViewAnalysis}
               disabled={status === 'not-started'}
               size="lg"
-              className="flex items-center gap-2"
+              className="w-full sm:w-auto flex items-center gap-2"
             >
               <BarChart3 className="h-4 w-4" />
               View Analysis

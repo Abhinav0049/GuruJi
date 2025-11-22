@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Brain, Users, Heart } from 'lucide-react';
+import { Brain, Users, Heart, Menu, X } from 'lucide-react';
+import { Button } from './components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Toaster } from "./components/ui/sonner";
 import { Sidebar } from "./components/Sidebar";
@@ -61,6 +62,7 @@ export default function App() {
   }, [urlParams.primaryModule, availableModules]);
   
   const [activeModule, setActiveModule] = useState(initialModule);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'survey' | 'analysis'>('survey');
   const [mode, setMode] = useState<'dashboard' | 'survey' | 'post-survey'>(
     urlParams.mode === 'survey' || isDirectSurveyLink ? 'survey' : 'dashboard'
@@ -174,7 +176,7 @@ export default function App() {
   useEffect(() => {
     let es: EventSource | null = null;
     try {
-      es = new EventSource('/api/realtime/stream');
+      es = new EventSource('/sse');
     } catch (err) {
       console.warn('SSE not available', err);
       return;
@@ -276,21 +278,49 @@ export default function App() {
       <div className="min-h-screen bg-gray-50 flex">
         {/* Sidebar: hide on Employee Experience dashboard to allow full-width overview */}
         {!(activeModule === 'employee-experience' && mode === 'dashboard') && (
-          <Sidebar 
-            activeModule={activeModule} 
-            onModuleChange={handleModuleChange}
-            surveyStatus={surveyStatus}
-            isAdmin={urlParams.isAdmin}
-            availableModules={availableModules}
-          />
+          <div className="hidden md:flex">
+            <Sidebar 
+              activeModule={activeModule} 
+              onModuleChange={handleModuleChange}
+              surveyStatus={surveyStatus}
+              isAdmin={urlParams.isAdmin}
+              availableModules={availableModules}
+            />
+          </div>
         )}
-      
+
+        {/* Mobile sidebar overlay (hidden on md+) */}
+        {showMobileSidebar && (
+          <div className="fixed inset-0 z-50 md:hidden flex">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowMobileSidebar(false)} />
+            <div className="relative w-64 bg-white h-full shadow-lg">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <div className="text-lg font-bold">Menu</div>
+                <Button variant="ghost" onClick={() => setShowMobileSidebar(false)}>
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <Sidebar
+                activeModule={activeModule}
+                onModuleChange={(m) => { setShowMobileSidebar(false); handleModuleChange(m); }}
+                surveyStatus={surveyStatus}
+                isAdmin={urlParams.isAdmin}
+                availableModules={availableModules}
+              />
+            </div>
+          </div>
+        )}
+
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex items-center">
+              <Button variant="ghost" className="md:hidden p-2 mr-3" onClick={() => setShowMobileSidebar(true)}>
+                <Menu className="h-5 w-5" />
+              </Button>
+              <div>
               <h1 className="text-2xl font-bold text-gray-900">
                 {activeModule === 'overview' ? 
                   (currentSurvey ? 
@@ -315,7 +345,9 @@ export default function App() {
                  activeModule.replace('-', ' ')}
               </p>
             </div>
-            
+          
+            </div>
+
             {/* Survey context indicator */}
             <div className="flex items-center gap-4">
               {currentSurvey && (

@@ -71,7 +71,7 @@ export function OverviewDashboard({ overallAverages, surveyResponses, mockData, 
   useEffect(() => {
     let es: EventSource | null = null;
     try {
-      es = new EventSource('/api/realtime/stream');
+      es = new EventSource('/sse');
     } catch (err) {
       console.error('EventSource not supported or failed to connect', err);
       return;
@@ -194,21 +194,23 @@ export function OverviewDashboard({ overallAverages, surveyResponses, mockData, 
                 <CardDescription>Monthly response activity</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={trendData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line 
-                      type="monotone" 
-                      dataKey="responses" 
-                      stroke="#3B82F6" 
-                      strokeWidth={2}
-                      dot={{ fill: '#3B82F6' }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <div className="h-48 md:h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip />
+                      <Line 
+                        type="monotone" 
+                        dataKey="responses" 
+                        stroke="#3B82F6" 
+                        strokeWidth={2}
+                        dot={{ fill: '#3B82F6' }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
 
@@ -219,24 +221,26 @@ export function OverviewDashboard({ overallAverages, surveyResponses, mockData, 
                 <CardDescription>Participation by department</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={demographicData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={120}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {demographicData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => [`${value}%`, 'Participation']} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div className="h-48 md:h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={demographicData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={120}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {demographicData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`${value}%`, 'Participation']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
                 <div className="flex flex-wrap gap-2 mt-4 justify-center">
                   {demographicData.map((item) => (
                     <Badge key={item.name} variant="outline" className="text-xs">
