@@ -207,15 +207,15 @@ export function EmployeeExperienceSection({
           <CardDescription>Overall driver and category breakdown</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-center space-x-8">
-            <div className="text-center">
+          <div className="flex flex-col md:flex-row items-center justify-center space-x-0 md:space-x-8 space-y-4 md:space-y-0">
+            <div className="text-center w-full md:w-auto">
               <div className="text-4xl font-bold text-green-600 mb-2">
                 {overallPercentage.toFixed(1)}%
               </div>
               <div className="text-lg font-medium text-gray-700">
                 Overall Positive Experience
               </div>
-              <div className="mt-4 w-64">
+              <div className="mt-4 w-full sm:w-64 mx-auto">
                 <Progress value={overallPercentage} className="h-3" />
               </div>
             </div>
