@@ -19,6 +19,7 @@ interface PostSurveyDashboardProps {
   surveyResponses: Record<string, string>;
   mockData: any;
   isStandalone?: boolean;
+  backendAggregates?: any;
 }
 
 export function PostSurveyDashboard({ 
@@ -26,6 +27,7 @@ export function PostSurveyDashboard({
   onBackToDashboard, 
   surveyResponses,
   mockData,
+  backendAggregates,
   isStandalone = false
 }: PostSurveyDashboardProps) {
   const [selectedModule, setSelectedModule] = useState(completedModule);
@@ -221,12 +223,13 @@ export function PostSurveyDashboard({
         />
 
         {/* Module Snapshot Metrics */}
-        <ModuleSnapshot
-          module={selectedModule}
-          campaign={activeCampaign}
-          surveyResponses={surveyResponses}
-          mockData={mockData}
-        />
+            <ModuleSnapshot
+              module={selectedModule}
+              campaign={activeCampaign}
+              surveyResponses={surveyResponses}
+              mockData={mockData}
+              serverSummary={backendAggregates?.[selectedModule]?.summaryMetrics}
+            />
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'responses' | 'results')}>

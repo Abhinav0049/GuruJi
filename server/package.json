@@ -6,15 +6,18 @@
 	"scripts": {
 		"build": "tsc -p tsconfig.json",
 		"start": "node dist/index.js",
-		"start:dev": "ts-node-dev --respawn --transpile-only server/src/index.ts"
+		"start:dev": "ts-node-dev --respawn --transpile-only server/src/index.ts",
+		"start:local-mongo": "bash ./scripts/start-mongo.sh",
+		"start:with-local-mongo": "bash ./scripts/start-mongo.sh && npm run start"
 	},
 	"dependencies": {
 		"body-parser": "^1.20.2",
+		"cors": "^2.8.5",
 		"dotenv": "^16.3.1",
 		"express": "^4.18.2",
 		"jsonwebtoken": "^9.0.2",
 		"mongodb": "^5.9.0",
-		"kafkajs": "^2.2.0",
+		"socket.io": "^4.8.1",
 		"uuid": "^9.0.0"
 	},
 	"devDependencies": {
@@ -23,6 +26,7 @@
 		"@types/node": "^20.4.2",
 		"@types/uuid": "^9.0.2",
 		"ts-node-dev": "^2.0.0",
-		"typescript": "^5.5.6"
+		"typescript": "^5.5.6",
+		"mongodb-memory-server": "^8.11.1"
 	}
 }

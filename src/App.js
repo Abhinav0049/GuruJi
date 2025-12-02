@@ -1,5 +1,4 @@
-import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Toaster } from "./components/ui/sonner";
 import { Sidebar } from "./components/Sidebar";
@@ -11,8 +10,9 @@ import { ModularSurvey } from "./components/ModularSurvey";
 import { PostSurveyDashboard } from "./components/PostSurveyDashboard";
 import { SurveyManagement } from "./components/SurveyManagement";
 import { WelcomeBanner } from "./components/WelcomeBanner";
-import { generateMockData } from "./utils/mockData";
+// Mock data removed — frontend relies on backend aggregates for real-time data
 import { parseUrlParams, getSurveyConfig, filterDataBySurvey } from "./utils/surveyManagement";
+import { aiReadinessQuestions, leadershipQuestions, employeeExperienceQuestions } from './utils/surveyData';
 import { calculateOverallAverages, calculateAIReadinessBySection, calculateLeadershipByLens, calculateLeadershipByConfiguration, calculateLeadershipByDriver, calculateEmployeeExperienceByCategory, calculateEmployeeExperienceByDriver, getEmployeeExperienceDistribution } from "./utils/calculations";
 export default function App() {
     // Parse URL parameters for survey filtering
@@ -48,18 +48,14 @@ export default function App() {
     const [mode, setMode] = useState(urlParams.mode === 'survey' || isDirectSurveyLink ? 'survey' : 'dashboard');
     const [surveyResponses, setSurveyResponses] = useState({});
     const [completedModule, setCompletedModule] = useState('');
-    // Generate mock data (stateful so we can refresh it in real-time)
-    const [mockData, setMockData] = useState(() => generateMockData(urlParams.surveyId));
-    // Re-generate mock data when the survey filter changes
-    useEffect(() => {
-        setMockData(generateMockData(urlParams.surveyId));
-    }, [urlParams.surveyId]);
+    // No mock data: start with empty datasets. Frontend will rely on backend `/api/aggregates`.
+    const [mockData, setMockData] = useState(() => ({ aiReadinessData: [], leadershipData: [], employeeExperienceData: [] }));
     // Filter data by survey ID
     const filteredData = useMemo(() => {
         return {
-            aiReadinessData: filterDataBySurvey(mockData.aiReadinessData, urlParams.surveyId),
-            leadershipData: filterDataBySurvey(mockData.leadershipData, urlParams.surveyId),
-            employeeExperienceData: filterDataBySurvey(mockData.employeeExperienceData, urlParams.surveyId)
+            aiReadinessData: filterDataBySurvey(mockData.aiReadinessData || [], urlParams.surveyId),
+            leadershipData: filterDataBySurvey(mockData.leadershipData || [], urlParams.surveyId),
+            employeeExperienceData: filterDataBySurvey(mockData.employeeExperienceData || [], urlParams.surveyId)
         };
     }, [mockData, urlParams.surveyId]);
     // Calculate all metrics using filtered data
@@ -71,6 +67,46 @@ export default function App() {
     const employeeByCategory = useMemo(() => calculateEmployeeExperienceByCategory(filteredData.employeeExperienceData), [filteredData.employeeExperienceData]);
     const employeeByDriver = useMemo(() => calculateEmployeeExperienceByDriver(filteredData.employeeExperienceData), [filteredData.employeeExperienceData]);
     const employeeDistribution = useMemo(() => getEmployeeExperienceDistribution(filteredData.employeeExperienceData), [filteredData.employeeExperienceData]);
+
+    // Backend aggregates state
+    const [backendAggregates, setBackendAggregates] = useState(null);
+
+    // If backend aggregates are available, prefer them (aggregated, no PII)
+    const usedOverallAverages = useMemo(() => {
+        if (!backendAggregates) return overallAverages;
+        return {
+            aiReadiness: backendAggregates['ai-readiness']?.summaryMetrics?.positiveAverage ?? overallAverages.aiReadiness,
+            leadership: backendAggregates['leadership']?.summaryMetrics?.positiveAverage ?? overallAverages.leadership,
+            employeeExperience: backendAggregates['employee-experience']?.summaryMetrics?.positiveAverage ?? overallAverages.employeeExperience
+        };
+    }, [backendAggregates, overallAverages]);
+
+    // Map backend questionScores into the shape components expect, falling back to local calculations
+    function mapBackendQuestionScores(moduleKey, questionMetaList, fallbackList) {
+        if (!backendAggregates || !backendAggregates[moduleKey] || !backendAggregates[moduleKey].questionScores) return { questionScores: fallbackList, sectionData: [] };
+        const scores = backendAggregates[moduleKey].questionScores.map(q => {
+            const meta = questionMetaList.find(m => m.id === q.questionId);
+            return {
+                question: meta ? meta.question : q.questionId,
+                score: q.positivePercentage ?? Math.round((q.average || 0) * 10) / 10,
+                section: meta ? (meta.section || meta.category || meta.driver || '') : ''
+            };
+        });
+        // derive sectionData
+        const bySection = {};
+        scores.forEach(s => {
+            const sec = s.section || 'Other';
+            if (!bySection[sec]) bySection[sec] = { total: 0, count: 0 };
+            bySection[sec].total += (s.score || 0);
+            bySection[sec].count += 1;
+        });
+        const sectionData = Object.entries(bySection).map(([section, v]) => ({ section, score: Math.round(((v.total / v.count) + Number.EPSILON) * 10) / 10, questionCount: v.count }));
+        return { questionScores: scores, sectionData };
+    }
+
+    const aiBackend = mapBackendQuestionScores('ai-readiness', aiReadinessQuestions, aiReadinessBySection.map(section => ({ question: section.section, score: section.positivePercentage, section: 'AI Readiness' })));
+    const leadershipBackend = mapBackendQuestionScores('leadership', leadershipQuestions, leadershipByLens.map(lens => ({ question: lens.driver, score: lens.positivePercentage, section: 'Leadership Lens' })));
+    const eeBackend = mapBackendQuestionScores('employee-experience', employeeExperienceQuestions, employeeByCategory.map(category => ({ question: category.driver, score: category.positivePercentage, section: 'Employee Experience' })));
     // Survey status tracking - updated for correct question counts
     const surveyStatus = useMemo(() => {
         const aiResponses = Object.keys(surveyResponses).filter(key => key.startsWith('ai-')).length;
@@ -115,9 +151,9 @@ export default function App() {
         setMode('dashboard');
         setActiveModule('overview');
     };
-    // SSE listener: refresh mock data on response events so dashboards update in real-time
+    // SSE listener: refresh aggregates on response events so dashboards update in real-time
     useEffect(() => {
-        let es = null;
+        let es;
         try {
             es = new EventSource('/sse');
         }
@@ -127,22 +163,47 @@ export default function App() {
         }
         const onResponse = (e) => {
             try {
-                // regenerate mock data for current survey
-                setMockData(generateMockData(urlParams.surveyId));
+                try {
+                    const parsed = e.data ? JSON.parse(e.data) : null;
+                    console.debug('SSE event received:', e.type, parsed);
+                }
+                catch (parseErr) {
+                    console.debug('SSE event received (no JSON payload)', e.type);
+                }
+                // Refresh aggregates from backend
+                fetchAggregates().catch(err => console.warn('Failed to fetch aggregates on SSE', err));
             }
             catch (err) {
-                console.error('Failed to update mockData on SSE', err);
+                console.error('Failed to handle SSE event', err);
             }
         };
         es.addEventListener('response', onResponse);
-        es.onerror = (err) => {
-            // EventSource auto-reconnects; log for diagnostics
-            console.warn('SSE error', err);
-        };
-        return () => {
-            if (es)
-                es.close();
-        };
+        es.addEventListener('response:created', onResponse);
+        es.onerror = (err) => console.warn('SSE error', err);
+        return () => es && es.close();
+    }, [urlParams.surveyId]);
+
+
+    async function fetchAggregates() {
+        try {
+            const qs = urlParams.surveyId ? `?surveyId=${encodeURIComponent(urlParams.surveyId)}` : '';
+            const res = await fetch(`/api/aggregates${qs}`);
+            if (!res.ok) throw new Error(`Aggregates fetch failed: ${res.status}`);
+            const json = await res.json();
+            if (json && json.ok && json.aggregates) {
+                setBackendAggregates(json.aggregates);
+            }
+            return json;
+        }
+        catch (err) {
+            console.error('Failed to fetch aggregates', err);
+            throw err;
+        }
+    }
+
+    // Fetch aggregates once on mount / when survey filter changes
+    useEffect(() => {
+        fetchAggregates().catch(() => { /* already logged */ });
     }, [urlParams.surveyId]);
     const handleModuleChange = (module) => {
         setActiveModule(module);
@@ -191,76 +252,128 @@ export default function App() {
             ]
         }
     };
+
     if (mode === 'survey') {
-        return (_jsx(ModularSurvey, { onComplete: handleSurveyComplete, specificModule: isDirectSurveyLink ? availableModules[0] : undefined }));
+        return <ModularSurvey onComplete={handleSurveyComplete} specificModule={isDirectSurveyLink ? availableModules[0] : undefined} />;
     }
     if (mode === 'post-survey') {
-        return (_jsx(PostSurveyDashboard, { completedModule: completedModule, onBackToDashboard: handleBackToDashboard, surveyResponses: surveyResponses, mockData: mockData, isStandalone: isDirectSurveyLink }));
+        return <PostSurveyDashboard completedModule={completedModule} onBackToDashboard={handleBackToDashboard} surveyResponses={surveyResponses} mockData={mockData} isStandalone={isDirectSurveyLink} backendAggregates={backendAggregates} />;
     }
-    return (_jsxs(_Fragment, { children: [_jsx(Toaster, {}), _jsxs("div", { className: "min-h-screen bg-gray-50 flex", children: [!(activeModule === 'employee-experience' && mode === 'dashboard') && (_jsx(Sidebar, { activeModule: activeModule, onModuleChange: handleModuleChange, surveyStatus: surveyStatus, isAdmin: urlParams.isAdmin, availableModules: availableModules })), _jsxs("div", { className: "flex-1 overflow-hidden", children: [_jsx("div", { className: "bg-white border-b border-gray-200 px-6 py-4", children: _jsxs("div", { className: "flex items-center justify-between", children: [_jsxs("div", { children: [_jsx("h1", { className: "text-2xl font-bold text-gray-900", children: activeModule === 'overview' ?
-                                                        (currentSurvey ?
-                                                            `${currentSurvey.companyName} - ${currentSurvey.primaryModule === 'ai-readiness' ? 'AI Readiness' :
-                                                                currentSurvey.primaryModule === 'leadership' ? 'Leadership' :
-                                                                    'Employee Experience'} Overview` :
-                                                            'Overview') :
-                                                        activeModule === 'ai-readiness' ? 'AI Readiness' :
-                                                            activeModule === 'leadership' ? 'Leadership' :
-                                                                activeModule === 'employee-experience' ? 'Employee Experience' :
-                                                                    activeModule === 'survey-management' ? 'Survey Management' :
-                                                                        activeModule.replace('-', ' ') }), _jsx("p", { className: "text-sm text-gray-600 mt-1", children: currentSurvey ?
-                                                        `${currentSurvey.targetAudience} • ${currentSurvey.responseCount} responses • ${currentSurvey.status}${currentSurvey.modules.length > 1 ? ` • ${currentSurvey.modules.length} modules` : ''}` :
-                                                        activeModule === 'overview' ? 'Dashboard summary and key insights' :
-                                                            activeModule === 'ai-readiness' ? 'Technology adoption assessment' :
-                                                                activeModule === 'leadership' ? 'Leadership effectiveness analysis' :
-                                                                    activeModule === 'employee-experience' ? 'Workplace satisfaction metrics' :
-                                                                        activeModule === 'survey-management' ? 'Create and manage client surveys' :
-                                                                            activeModule.replace('-', ' ') })] }), _jsxs("div", { className: "flex items-center gap-4", children: [currentSurvey && (_jsx("div", { className: "bg-blue-50 border border-blue-200 rounded-lg px-4 py-2", children: _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("div", { className: "w-2 h-2 bg-blue-500 rounded-full" }), _jsxs("span", { className: "text-sm font-medium text-blue-800", children: [currentSurvey.companyName, " (", currentSurvey.primaryModule === 'ai-readiness' ? 'AI Readiness' :
-                                                                        currentSurvey.primaryModule === 'leadership' ? 'Leadership' :
-                                                                            'Employee Experience', ")"] })] }) })), Object.keys(surveyResponses).length > 0 && (_jsx("div", { className: "bg-green-50 border border-green-200 rounded-lg px-4 py-2", children: _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("div", { className: "w-2 h-2 bg-green-500 rounded-full" }), _jsxs("span", { className: "text-sm font-medium text-green-800", children: ["Survey Completed (", Object.keys(surveyResponses).length, " responses)"] })] }) })), urlParams.isAdmin && !currentSurvey && (_jsx("div", { className: "bg-purple-50 border border-purple-200 rounded-lg px-4 py-2", children: _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("div", { className: "w-2 h-2 bg-purple-500 rounded-full" }), _jsx("span", { className: "text-sm font-medium text-purple-800", children: "Admin View (All Data)" })] }) }))] })] }) }), _jsxs("div", { className: "p-6 h-full overflow-auto", children: [activeModule === 'overview' && (_jsxs(_Fragment, { children: [_jsx(WelcomeBanner, { currentSurvey: currentSurvey, isAdmin: urlParams.isAdmin, availableModules: availableModules }), _jsx(OverviewDashboard, { overallAverages: overallAverages, surveyResponses: surveyResponses, mockData: filteredData, availableModules: availableModules })] })), activeModule === 'survey-management' && (_jsx(SurveyManagement, {})), availableModules.includes(activeModule) && (_jsx("div", { className: "space-y-6", children: _jsxs(Tabs, { value: activeSubTab, onValueChange: (value) => setActiveSubTab(value), children: [_jsxs(TabsList, { className: "grid w-full grid-cols-2 max-w-md", children: [_jsx(TabsTrigger, { value: "survey", children: "Survey" }), _jsx(TabsTrigger, { value: "analysis", children: "Analysis" })] }), _jsx(TabsContent, { value: "survey", className: "mt-6", children: _jsx(ModuleSurveyTab, { module: moduleConfigs[activeModule], status: activeModule === 'ai-readiness' ? surveyStatus.aiReadiness :
-                                                            activeModule === 'leadership' ? surveyStatus.leadership :
-                                                                activeModule === 'employee-experience' ? surveyStatus.employeeExperience :
-                                                                    'not-started', progress: activeModule === 'ai-readiness' ?
-                                                            Math.round((Object.keys(surveyResponses).filter(k => k.startsWith('ai-')).length / 6) * 100) :
-                                                            activeModule === 'leadership' ?
-                                                                Math.round((Object.keys(surveyResponses).filter(k => k.startsWith('leadership-')).length / 8) * 100) :
-                                                                Math.round((Object.keys(surveyResponses).filter(k => k.startsWith('ee-')).length / 16) * 100), onStartSurvey: handleTakeSurvey, onResumeSurvey: handleTakeSurvey, onViewAnalysis: () => setActiveSubTab('analysis'), lastUpdated: Object.keys(surveyResponses).length > 0 ? new Date().toLocaleDateString() : undefined }) }), _jsxs(TabsContent, { value: "analysis", className: "mt-6", children: [activeModule === 'ai-readiness' && availableModules.includes('ai-readiness') && (_jsx(ModuleAnalysisTab, { moduleTitle: "AI Readiness", summaryMetrics: {
-                                                                positiveAverage: overallAverages.aiReadiness,
-                                                                totalQuestions: 6,
-                                                                responseCount: filteredData.aiReadinessData.length,
-                                                                trend: 2.3
-                                                            }, questionScores: aiReadinessBySection.map(section => ({
-                                                                question: section.section,
-                                                                score: section.positivePercentage,
-                                                                section: 'AI Readiness'
-                                                            })), sectionData: aiReadinessBySection.map(section => ({
-                                                                section: section.section,
-                                                                score: section.positivePercentage,
-                                                                questionCount: section.totalCount
-                                                            })), surveyResponses: surveyResponses, moduleId: 'ai-readiness' })), activeModule === 'leadership' && availableModules.includes('leadership') && (_jsx(ModuleAnalysisTab, { moduleTitle: "Leadership", summaryMetrics: {
-                                                                positiveAverage: overallAverages.leadership,
-                                                                totalQuestions: 8,
-                                                                responseCount: filteredData.leadershipData.length,
-                                                                trend: 1.8
-                                                            }, questionScores: leadershipByLens.map(lens => ({
-                                                                question: lens.driver,
-                                                                score: lens.positivePercentage,
-                                                                section: 'Leadership Lens'
-                                                            })), sectionData: leadershipByLens.map(lens => ({
-                                                                section: lens.driver,
-                                                                score: lens.positivePercentage,
-                                                                questionCount: lens.totalCount
-                                                            })), surveyResponses: surveyResponses, moduleId: 'leadership' })), activeModule === 'employee-experience' && availableModules.includes('employee-experience') && (_jsxs(_Fragment, { children: [_jsx(ModuleAnalysisTab, { moduleTitle: "Employee Experience", summaryMetrics: {
-                                                                        positiveAverage: overallAverages.employeeExperience,
-                                                                        totalQuestions: 16,
-                                                                        responseCount: filteredData.employeeExperienceData.length,
-                                                                        trend: -0.5
-                                                                    }, questionScores: employeeByCategory.map(category => ({
-                                                                        question: category.driver,
-                                                                        score: category.positivePercentage,
-                                                                        section: 'Employee Experience'
-                                                                    })), sectionData: employeeByCategory.map(category => ({
-                                                                        section: category.driver,
-                                                                        score: category.positivePercentage,
-                                                                        questionCount: category.totalCount
-                                                                    })), surveyResponses: surveyResponses, moduleId: 'employee-experience' }), _jsx("div", { className: "mt-6", children: _jsx(EmployeeExperienceSection, { categoryData: employeeByCategory, driverData: employeeByDriver, overallPercentage: overallAverages.employeeExperience, distribution: employeeDistribution, surveyResponses: surveyResponses, moduleId: 'employee-experience' }) })] }))] })] }) }))] })] })] })] }));
+
+    return (
+        <>
+            <Toaster />
+            <div className="min-h-screen bg-gray-50 flex">
+                {!(activeModule === 'employee-experience' && mode === 'dashboard') && (
+                    <Sidebar activeModule={activeModule} onModuleChange={handleModuleChange} surveyStatus={surveyStatus} isAdmin={urlParams.isAdmin} availableModules={availableModules} />
+                )}
+                <div className="flex-1 overflow-hidden">
+                    <div className="bg-white border-b border-gray-200 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900">
+                                    {activeModule === 'overview' ? (currentSurvey ? `${currentSurvey.companyName} - ${currentSurvey.primaryModule === 'ai-readiness' ? 'AI Readiness' : currentSurvey.primaryModule === 'leadership' ? 'Leadership' : 'Employee Experience'} Overview` : 'Overview') : activeModule.replace('-', ' ')}
+                                </h1>
+                                <p className="text-sm text-gray-600 mt-1">
+                                    {currentSurvey ? `${currentSurvey.targetAudience} • ${currentSurvey.responseCount} responses • ${currentSurvey.status}` : activeModule === 'overview' ? 'Dashboard summary and key insights' : ''}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-6 h-full overflow-auto">
+                        {!backendAggregates && (
+                            <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 rounded">
+                                Waiting for backend aggregates — dashboard will update when server data arrives.
+                            </div>
+                        )}
+                        {activeModule === 'overview' && (
+                            <>
+                                <WelcomeBanner currentSurvey={currentSurvey} isAdmin={urlParams.isAdmin} availableModules={availableModules} />
+                                <OverviewDashboard overallAverages={usedOverallAverages} surveyResponses={surveyResponses} mockData={filteredData} availableModules={availableModules} />
+                            </>
+                        )}
+
+                        {activeModule === 'survey-management' && <SurveyManagement />}
+
+                        {availableModules.includes(activeModule) && (
+                            <div className="space-y-6">
+                                <Tabs value={activeSubTab} onValueChange={(value) => setActiveSubTab(value)}>
+                                    <TabsList className="grid w-full grid-cols-2 max-w-md">
+                                        <TabsTrigger value="survey">Survey</TabsTrigger>
+                                        <TabsTrigger value="analysis">Analysis</TabsTrigger>
+                                    </TabsList>
+
+                                    <TabsContent value="survey" className="mt-6">
+                                        <ModuleSurveyTab
+                                            module={moduleConfigs[activeModule]}
+                                            status={activeModule === 'ai-readiness' ? surveyStatus.aiReadiness : activeModule === 'leadership' ? surveyStatus.leadership : activeModule === 'employee-experience' ? surveyStatus.employeeExperience : 'not-started'}
+                                            progress={activeModule === 'ai-readiness' ? Math.round((Object.keys(surveyResponses).filter(k => k.startsWith('ai-')).length / 6) * 100) : activeModule === 'leadership' ? Math.round((Object.keys(surveyResponses).filter(k => k.startsWith('leadership-')).length / 8) * 100) : Math.round((Object.keys(surveyResponses).filter(k => k.startsWith('ee-')).length / 16) * 100)}
+                                            onStartSurvey={handleTakeSurvey}
+                                            onResumeSurvey={handleTakeSurvey}
+                                            onViewAnalysis={() => setActiveSubTab('analysis')}
+                                            lastUpdated={Object.keys(surveyResponses).length > 0 ? new Date().toLocaleDateString() : undefined}
+                                        />
+                                    </TabsContent>
+
+                                    <TabsContent value="analysis" className="mt-6">
+                                        {activeModule === 'ai-readiness' && (
+                                            <ModuleAnalysisTab
+                                                moduleTitle="AI Readiness"
+                                                summaryMetrics={{
+                                                    positiveAverage: usedOverallAverages.aiReadiness,
+                                                    totalQuestions: 6,
+                                                    responseCount: backendAggregates?.['ai-readiness']?.summaryMetrics?.responseCount ?? filteredData.aiReadinessData.length,
+                                                    trend: 2.3
+                                                }}
+                                                questionScores={aiBackend.questionScores}
+                                                sectionData={aiBackend.sectionData}
+                                                surveyResponses={surveyResponses}
+                                                moduleId="ai-readiness"
+                                            />
+                                        )}
+
+                                        {activeModule === 'leadership' && (
+                                            <ModuleAnalysisTab
+                                                moduleTitle="Leadership"
+                                                summaryMetrics={{
+                                                    positiveAverage: backendAggregates?.leadership?.summaryMetrics?.positiveAverage ?? usedOverallAverages.leadership,
+                                                    totalQuestions: backendAggregates?.leadership?.summaryMetrics?.totalQuestions ?? 8,
+                                                    responseCount: backendAggregates?.leadership?.summaryMetrics?.responseCount ?? filteredData.leadershipData.length,
+                                                    trend: backendAggregates?.leadership?.summaryMetrics?.trend ?? 1.8,
+                                                    medianQuestionScore: backendAggregates?.leadership?.summaryMetrics?.medianQuestionScore,
+                                                    topDemographic: backendAggregates?.leadership?.summaryMetrics?.topDemographic
+                                                }}
+                                                questionScores={leadershipBackend.questionScores}
+                                                sectionData={leadershipBackend.sectionData}
+                                                // Do NOT pass individual survey responses to the UI for company-level analysis
+                                                // Only include them for admin users (who explicitly requested it)
+                                                surveyResponses={urlParams.isAdmin ? surveyResponses : undefined}
+                                                moduleId="leadership"
+                                            />
+                                        )}
+
+                                        {activeModule === 'employee-experience' && (
+                                            <ModuleAnalysisTab
+                                                moduleTitle="Employee Experience"
+                                                summaryMetrics={{
+                                                    positiveAverage: usedOverallAverages.employeeExperience,
+                                                    totalQuestions: 16,
+                                                    responseCount: backendAggregates?.['employee-experience']?.summaryMetrics?.responseCount ?? filteredData.employeeExperienceData.length,
+                                                    trend: 1.8
+                                                }}
+                                                questionScores={eeBackend.questionScores}
+                                                sectionData={eeBackend.sectionData}
+                                                surveyResponses={surveyResponses}
+                                                moduleId="employee-experience"
+                                            />
+                                        )}
+                                    </TabsContent>
+                                </Tabs>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </>
+    );
 }

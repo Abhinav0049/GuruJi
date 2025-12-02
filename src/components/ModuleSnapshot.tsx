@@ -9,9 +9,10 @@ interface ModuleSnapshotProps {
   campaign?: SurveyCampaign;
   surveyResponses: Record<string, string>;
   mockData: any;
+  serverSummary?: any;
 }
 
-export function ModuleSnapshot({ module, campaign, surveyResponses, mockData }: ModuleSnapshotProps) {
+export function ModuleSnapshot({ module, campaign, surveyResponses, mockData, serverSummary }: ModuleSnapshotProps) {
   const moduleData = useMemo(() => {
     // Calculate module-specific metrics
     const getModuleResponses = (prefix: string) => 
@@ -20,19 +21,17 @@ export function ModuleSnapshot({ module, campaign, surveyResponses, mockData }: 
     const responseCount = getModuleResponses(module === 'ai-readiness' ? 'ai-' : 
                                           module === 'leadership' ? 'leadership-' : 'ee-');
 
-    // Mock calculations - in real app, these would come from your calculations utility
-    const positiveScore = module === 'ai-readiness' ? 74.2 :
-                         module === 'leadership' ? 78.6 :
-                         71.8;
+    // Prefer server-provided summary metrics when available
+    const positiveScore = serverSummary?.positiveAverage ?? (module === 'ai-readiness' ? 74.2 : module === 'leadership' ? 78.6 : 71.8);
+    const previousScore = serverSummary?.previousScore ?? (positiveScore - (module === 'ai-readiness' ? 2.3 : module === 'leadership' ? 1.8 : -0.5));
 
-    const previousScore = positiveScore - (module === 'ai-readiness' ? 2.3 :
-                                         module === 'leadership' ? 1.8 : -0.5);
-
-    const completionRate = campaign ? campaign.completionRate : 89;
-    const medianScore = positiveScore - 3.2;
-    const topDemographic = module === 'ai-readiness' ? 'Engineering 89%' :
-                          module === 'leadership' ? 'Product Ops 87%' :
-                          'Design Team 84%';
+    // Compute completionRate using server responseCount and campaign participantCount when available
+    let completionRate = campaign ? campaign.completionRate : 89;
+    if (serverSummary && typeof serverSummary.responseCount === 'number' && campaign && typeof campaign.participantCount === 'number' && campaign.participantCount > 0) {
+      completionRate = Math.round((Number(serverSummary.responseCount) / Number(campaign.participantCount)) * 100);
+    }
+    const medianScore = serverSummary?.medianQuestionScore ?? (positiveScore - 3.2);
+    const topDemographic = serverSummary?.topDemographic ? `${serverSummary.topDemographic.group} ${serverSummary.topDemographic.pct}%` : (module === 'ai-readiness' ? 'Engineering 89%' : module === 'leadership' ? 'Product Ops 87%' : 'Design Team 84%');
 
     return {
       positiveScore,
