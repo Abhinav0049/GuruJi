@@ -117,78 +117,12 @@ function generateSurveyDates(count) {
     }
     return dates;
 }
-// Generate mock data
-export function generateMockData(surveyId) {
-    const participantCount = surveyId ? 50 : 150; // Smaller dataset for specific surveys
-    const participantIds = generateParticipantIds(participantCount);
-    const dates = generateSurveyDates(participantCount);
-    // Generate AI Readiness data (6 questions total)
-    const aiReadinessData = [];
-    aiReadinessQuestions.forEach((question, qIndex) => {
-        // Determine section for this question
-        let section = '';
-        if (qIndex < 2)
-            section = 'Strategy & Leadership';
-        else if (qIndex < 4)
-            section = 'Infrastructure & Skills';
-        else
-            section = 'Data & Culture';
-        participantIds.forEach((participantId, pIndex) => {
-            aiReadinessData.push({
-                section,
-                question,
-                response: generateRandomResponse('1-5'),
-                respondentId: participantId,
-                date: dates[pIndex],
-                surveyId: surveyId || `general-survey-${Math.floor(pIndex / 10)}`,
-                participantType: Math.random() < 0.3 ? 'manager' : 'employee'
-            });
-        });
-    });
-    // Generate Leadership data (8 questions total - 4 per lens/driver category)
-    const leadershipData = [];
-    Object.entries(leadershipStructure).forEach(([type, categories]) => {
-        Object.entries(categories).forEach(([categoryName, questions]) => {
-            questions.forEach(question => {
-                participantIds.forEach((participantId, pIndex) => {
-                    leadershipData.push({
-                        lens: type === 'Lens' ? categoryName : '',
-                        configuration: type === 'Driver' ? categoryName : '',
-                        driver: categoryName,
-                        question,
-                        response: generateRandomResponse('1-5'),
-                        respondentId: participantId,
-                        date: dates[pIndex],
-                        surveyId: surveyId || `general-survey-${Math.floor(pIndex / 10)}`,
-                        participantType: Math.random() < 0.3 ? 'manager' : 'employee'
-                    });
-                });
-            });
-        });
-    });
-    // Generate Employee Experience data (16 questions total, 0-10 scale)
-    const employeeExperienceData = [];
-    Object.entries(employeeExperienceStructure).forEach(([category, questions]) => {
-        questions.forEach(question => {
-            participantIds.forEach((participantId, pIndex) => {
-                employeeExperienceData.push({
-                    category,
-                    driver: category,
-                    question,
-                    response: generateRandomResponse('0-10'),
-                    scale: '0-10',
-                    respondentId: participantId,
-                    date: dates[pIndex],
-                    surveyId: surveyId || `general-survey-${Math.floor(pIndex / 10)}`,
-                    participantType: Math.random() < 0.3 ? 'manager' : 'employee'
-                });
-            });
-        });
-    });
+// Return empty datasets to avoid shipping mock/demo data in shared repos
+export function generateMockData(/* surveyId */) {
     return {
-        aiReadinessData,
-        leadershipData,
-        employeeExperienceData
+        aiReadinessData: [],
+        leadershipData: [],
+        employeeExperienceData: []
     };
 }
 // Export survey structure for components

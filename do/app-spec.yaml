@@ -1,0 +1,26 @@
+name: world-backend
+services:
+  - name: backend
+    image:
+      registry: dockerhub
+      repository: abhinavleap/world-backend
+      tag: latest
+    run_command: node server/index.js
+    envs:
+      - key: PORT
+        value: "3000"
+      - key: MONGODB_URI
+        scope: RUN_AND_BUILD_TIME
+      - key: REDIS_URL
+        scope: RUN_AND_BUILD_TIME
+      - key: JWT_SECRET
+        scope: RUN_AND_BUILD_TIME
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    routes:
+      - path: /
+        preserve_path: true
+
+databases: []
+jobs: []
